@@ -1,10 +1,11 @@
 import type { FilterId } from "./research";
 
-export const BEATS = [
+export const BEATS: { kicker: string; title: string; body: string; byline?: string }[] = [
   {
-    kicker: "Investigación · 31 de octubre de 2026",
-    title: "Dentro del cerebro",
-    body: "Esto es lo que hace la investigación de trading de Xavier con una idea antes de dejarla tocar dinero. Miles de variantes entran. Casi ninguna sale.",
+    kicker: "",
+    title: "Proyecto Cerebro",
+    byline: "por Xavier Cabré Lugo",
+    body: "Investigación de trading cuantitativo · Modelado financiero · Red neuronal de estrategias",
   },
   {
     kicker: "01 — Entrada",
@@ -35,7 +36,14 @@ export const STAGES = [
     title: "Prueba",
     text: "Dentro de muestra 2020–2023. Fuera, 2024–octubre 2026. DSR, Holm, un nulo aleatorio y block bootstrap.",
   },
-  { id: "ejecucion", title: "Ejecución", text: "Siempre en paper primero. El mercado real puede esperar." },
+  { id: "ejecucion", title: "Ejecución", text: "La orden, el tamaño y el momento de mandarla." },
+];
+
+export const MODES = [
+  { id: "cerebro", label: "Cerebro", hint: "Girar, acercar, arrastrar" },
+  { id: "neuronas", label: "Neuronas", hint: "La red enciende sus sinapsis" },
+  { id: "graficos", label: "Gráficos", hint: "Senderos de capital en 3D" },
+  { id: "sismo", label: "Sismo", hint: "Relieve de resultados" },
 ];
 
 export const FILTERS: { id: FilterId; label: string }[] = [
@@ -51,7 +59,11 @@ export const FILTERS: { id: FilterId; label: string }[] = [
 export const NAV: { id: string; label: string }[] = [
   { id: "relato", label: "Relato" },
   { id: "cerebro", label: "Cerebro" },
+  { id: "neuronas", label: "Neuronas" },
+  { id: "graficos", label: "Gráficos" },
+  { id: "sismo", label: "Sismo" },
   { id: "tuberia", label: "Tubería" },
   { id: "embudo", label: "Embudo" },
   { id: "escalera", label: "Escalera" },
+  { id: "tesis", label: "Tesis" },
 ];

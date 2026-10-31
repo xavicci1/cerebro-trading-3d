@@ -39,14 +39,26 @@ const SYMBOLS: Record<string, string> = {
 };
 
 const POLICIES: Record<string, string> = {
-  "F21_rerun_corrected(alpha300k,Pro10%)": "F21 base · alpha 300k",
-  F_alpha400k: "Alpha 400k",
-  "F_+alphaScaling": "Alpha con escala",
-  F_noAlpha: "Sin alpha",
-  "F22_baseline(Alpha holds weekends)": "F22 · el alpha aguanta el finde",
-  F23_Alpha_flatFriday: "Alpha plano el viernes",
-  "F23_flat+alpha400k": "Plano el viernes + alpha 400k",
+  "F21_rerun_corrected(alpha300k,Pro10%)": "Base",
+  F_alpha400k: "Variante 2",
+  "F_+alphaScaling": "Variante 3",
+  F_noAlpha: "Variante 4",
+  "F22_baseline(Alpha holds weekends)": "El finde sigue en mercado",
+  F23_Alpha_flatFriday: "Viernes en plano",
+  "F23_flat+alpha400k": "Viernes en plano, variante 2",
 };
+
+const PROP_SYMBOL = /ftmo|funded\s*next|fundednext|the\s*5ers|the5ers|topstep|\b5ers\b|alpha\s*capital/i;
+const PROP_STRATEGY = /^(Ladder\d|Ladder30|Ladder21|Ladder22|Ladder23|SmallP2|SmallAcct|Sim100)/i;
+const PROP_CLAUSE = /ftmo|fundednext|the5ers|topstep|\b5ers\b|alpha\s*capital|cuentas?\s+fondeadas?|cuentas?\s+financiadas?|\bpayouts?\b|\bscaling\b|fondeo/i;
+
+export function isPropSymbol(id: string) {
+  return PROP_SYMBOL.test(id);
+}
+
+export function isPropStrategy(id: string) {
+  return PROP_STRATEGY.test(id) || PROP_SYMBOL.test(id);
+}
 
 export const fmt = new Intl.NumberFormat("es-ES");
 export const fmt1 = new Intl.NumberFormat("es-ES", {
@@ -77,17 +89,37 @@ export function usd(value: number) {
 }
 
 export function strategyName(id: string) {
+  if (isPropStrategy(id)) return "Nota de simulación";
   return STRATEGY_NAMES[id] ?? id.replaceAll("_", " ");
 }
 
 export function symbolName(id: string) {
   if (!id) return "Sin mercado";
+  if (isPropSymbol(id)) return "Simulación de capital";
   const friendly = SYMBOLS[id];
   return friendly ? `${friendly} · ${id}` : id;
 }
 
 export function policyName(id: string) {
-  return POLICIES[id] ?? id;
+  return POLICIES[id] ?? "Variante";
+}
+
+export function shownReason(strategy: string, symbol: string, reason: string) {
+  if (isPropStrategy(strategy) || isPropSymbol(symbol)) {
+    return "Nota de la simulación de crecimiento del capital. El detalle no se muestra en la ficha.";
+  }
+  const cleaned = reason
+    .split(/\s*;\s*/)
+    .filter((part) => part && !PROP_CLAUSE.test(part))
+    .join("; ");
+  return reasonEs(cleaned);
+}
+
+export function shownParams(strategy: string, symbol: string, raw: string) {
+  if (isPropStrategy(strategy) || isPropSymbol(symbol) || PROP_CLAUSE.test(raw)) {
+    return "Sin parámetros públicos.";
+  }
+  return prettyParams(raw);
 }
 
 export function numEs(value: number) {

@@ -1,13 +1,14 @@
 import { Canvas } from "@react-three/fiber";
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { requestZoom } from "./bridge";
-import { BEATS, FILTERS, NAV, STAGES } from "./copy";
-import { fmt, fmt1, fmt2, pct, pctSmart, policyName, prettyParams, reasonEs, strategyName, symbolName, usd, verdictRawEs } from "./format";
+import { BEATS, FILTERS, MODES, NAV, STAGES } from "./copy";
+import { fmt, fmt1, fmt2, isPropSymbol, pct, pctSmart, policyName, shownParams, shownReason, strategyName, symbolName, usd, verdictRawEs } from "./format";
 import { useBeat, useMedia, useScene } from "./hooks";
 import { VERDICT_COLOR, VERDICT_LABEL } from "./palette";
 import { gateRows, nodeMatches, nodes, research, type FilterId } from "./research";
-import { fijo, motion, publishScroll, sceneAtMarker, storyProgress } from "./scroll";
+import { fijo, INTERACTIVE, motion, publishScroll, sceneAtMarker, storyProgress } from "./scroll";
 import { Experience } from "./scene/Experience";
+import { TesisSection } from "./TesisSection";
 
 class Boundary extends Component<{ children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -59,6 +60,7 @@ export function App() {
   const [market, setMarket] = useState("");
   const [selected, setSelected] = useState<number | null>(null);
   const [stage, setStage] = useState(0);
+  const [lit, setLit] = useState<number[] | null>(null);
   const railRef = useRef<HTMLSpanElement>(null);
   const sheetRef = useRef<HTMLElement>(null);
 
@@ -109,11 +111,15 @@ export function App() {
 
   useEffect(() => {
     const titles = {
-      relato: "Cerebro — el relato",
-      cerebro: "Cerebro — las neuronas",
-      tuberia: "Cerebro — la tubería",
-      embudo: "Cerebro — el embudo",
-      escalera: "Cerebro — la escalera",
+      relato: "Proyecto Cerebro — Xavier Cabré Lugo",
+      cerebro: "Proyecto Cerebro — cerebro",
+      neuronas: "Proyecto Cerebro — neuronas",
+      graficos: "Proyecto Cerebro — gráficos",
+      sismo: "Proyecto Cerebro — sismo",
+      tuberia: "Proyecto Cerebro — tubería",
+      embudo: "Proyecto Cerebro — embudo",
+      escalera: "Proyecto Cerebro — escalera de capital",
+      tesis: "Proyecto Cerebro — tesis",
     } as const;
     document.title = titles[scene];
   }, [scene]);
@@ -148,12 +154,14 @@ export function App() {
   const active = BEATS[beat];
   const headline = research.ladder.headline;
   const selectedNode = selected == null ? null : nodes[selected];
+  const emphasis = useMemo(() => (lit && lit.length ? new Set(lit) : null), [lit]);
+  const interactive = INTERACTIVE.includes(scene);
 
   return (
     <>
       {graphics ? (
         <Boundary>
-          <div className={scene === "cerebro" ? "canvas-wrap live" : "canvas-wrap"} aria-hidden="true">
+          <div className={interactive ? "canvas-wrap live" : "canvas-wrap"} aria-hidden={interactive ? undefined : true}>
             <Canvas
               dpr={compact ? [1, 1.35] : [1, 1.75]}
               camera={{ position: [0.2, 0.4, 7.2], fov: compact ? 50 : 40, near: 0.1, far: 60 }}
@@ -169,6 +177,7 @@ export function App() {
                 selected={selected}
                 onSelect={setSelected}
                 onStage={onStage}
+                emphasis={emphasis}
               />
             </Canvas>
           </div>
@@ -184,7 +193,7 @@ export function App() {
         <header>
           <a className="brand" href="#relato">
             Cerebro
-            <small>Investigación de Xavier</small>
+            <small>Xavier Cabré Lugo</small>
           </a>
           <nav className="nav" aria-label="Secciones">
             {NAV.map((item) => (
@@ -195,7 +204,7 @@ export function App() {
           </nav>
         </header>
 
-        {scene === "cerebro" && graphics && (
+        {interactive && graphics && (
           <div className="zoom">
             <button type="button" onClick={() => requestZoom(0.86)} aria-label="Acercar">
               +
@@ -209,12 +218,20 @@ export function App() {
         <section className="story" id="relato">
           <div className="story-sticky">
             <div className="copy">
-              <p className="warn">Backtests y paper. No es asesoramiento financiero ni una promesa de resultados.</p>
               <article className="beat" key={active.title}>
-                <p className="kicker">{active.kicker}</p>
+                {active.kicker ? <p className="kicker">{active.kicker}</p> : null}
                 <h2>{active.title}</h2>
-                <p className="lede">{active.body}</p>
+                {active.byline ? <p className="byline">{active.byline}</p> : null}
+                <p className={active.byline ? "subtitle" : "lede"}>{active.body}</p>
               </article>
+              <div className="mode-row">
+                {MODES.map((mode) => (
+                  <a key={mode.id} className="mode" href={`#${mode.id}`}>
+                    <strong>{mode.label}</strong>
+                    <span>{mode.hint}</span>
+                  </a>
+                ))}
+              </div>
               <div className="dots" role="tablist" aria-label="Tramos del relato">
                 {BEATS.map((item, index) => (
                   <button
@@ -289,8 +306,8 @@ export function App() {
                     <dd>{show(selectedNode.isT)}</dd>
                   </div>
                 </dl>
-                <p>{reasonEs(selectedNode.reason)}</p>
-                <p className="params">{prettyParams(selectedNode.params)}</p>
+                <p>{shownReason(selectedNode.strategy, selectedNode.symbol, selectedNode.reason)}</p>
+                <p className="params">{shownParams(selectedNode.strategy, selectedNode.symbol, selectedNode.params)}</p>
                 <p className="fine">
                   En muestra {research.windows.is}. Fuera de muestra {research.windows.oos}. El drawdown del filtro usa el
                   tramo completo cuando el registro lo trae.
@@ -330,7 +347,7 @@ export function App() {
                   <select value={market} onChange={(event) => setMarket(event.target.value)}>
                     <option value="">Todos</option>
                     {research.markets
-                      .filter((item) => item.symbol)
+                      .filter((item) => item.symbol && !isPropSymbol(item.symbol))
                       .slice(0, 14)
                       .map((item) => (
                         <option key={item.symbol} value={item.symbol}>
@@ -388,6 +405,41 @@ export function App() {
           </div>
         </section>
 
+        <section className="stage" id="neuronas">
+          <div className="copy">
+            <p className="kicker">Neuronas</p>
+            <h2>La red piensa</h2>
+            <p className="lede">
+              La cámara entra en el cerebro. Las sinapsis recorren las conexiones y, en pantallas grandes, un bloom recoge la luz.
+            </p>
+            <p>Arrastra para girar. Pellizca o usa la rueda para acercarte. En el teléfono el efecto se aligera para que siga fluido.</p>
+          </div>
+        </section>
+
+        <section className="stage" id="graficos">
+          <div className="copy">
+            <p className="kicker">Gráficos</p>
+            <h2>{compact ? "760" : "2.200"} senderos</h2>
+            <p className="lede">{research.fan.note}</p>
+            <p className="fine">
+              {fmt.format(research.fan.sample)} fichas conservadas calibran el paso. La banda es el abanico entre el percentil 10 y el 90.
+              La línea clara es la mediana.
+            </p>
+          </div>
+        </section>
+
+        <section className="stage" id="sismo">
+          <div className="copy">
+            <p className="kicker">Sismo</p>
+            <h2>Relieve</h2>
+            <p className="lede">{research.seismo.note}</p>
+            <p className="fine">
+              Eje corto: {research.seismo.symbols.slice(0, 6).map((symbol) => symbolName(symbol).split(" · ")[0]).join(", ")}
+              {research.seismo.symbols.length > 6 ? "…" : ""}. Eje largo: {fmt.format(research.seismo.batches.length)} tandas.
+            </p>
+          </div>
+        </section>
+
         <section className="stage" id="tuberia">
           <div className="copy">
             <p className="kicker">03 — Tubería</p>
@@ -402,7 +454,7 @@ export function App() {
                 </article>
               ))}
             </div>
-            <p className="fine">La partícula recorre las ocho estaciones. La ejecución, al final, espera en paper.</p>
+            <p className="fine">La partícula recorre las ocho estaciones.</p>
           </div>
         </section>
 
@@ -462,12 +514,12 @@ export function App() {
 
         <section className="stage" id="escalera">
           <div className="copy">
-            <p className="kicker">05 — Escalera</p>
+            <p className="kicker">Escalera de capital</p>
             <h2>{usd(research.ladder.targetMonthly)} al mes</h2>
             <p className="lede">
-              Camino simulado con {research.ladder.firms.join(", ")}. La política base da un {pct(research.ladder.rounded.p12)} a
-              los 12 meses, un {pct(research.ladder.rounded.p18)} a los 18 y un {pct(research.ladder.rounded.p24)} a los 24. El mes
-              mediano es el {headline.medianMonth}.
+              Crecimiento del capital por reinversión del libro de estrategias. La política base alcanza el objetivo con un{" "}
+              {pct(research.ladder.rounded.p12)} a los 12 meses, un {pct(research.ladder.rounded.p18)} a los 18 y un{" "}
+              {pct(research.ladder.rounded.p24)} a los 24. El mes mediano es el {headline.medianMonth}.
             </p>
             <div className="stat-row">
               <article className="stat">
@@ -484,16 +536,10 @@ export function App() {
               </article>
             </div>
             <p>
-              Quien llega cobra, de mediana entre los meses 19 y 24, {headline.monthly == null ? "—" : usd(headline.monthly)}. El
-              cuartil bajo de esa simulación se queda en {headline.p25 == null ? "—" : usd(headline.p25)}. La mediana no es una
-              nómina.
+              Entre los meses 19 y 24, la mediana mensual de esa reinversión es{" "}
+              {headline.monthly == null ? "—" : usd(headline.monthly)}. El cuartil bajo queda en{" "}
+              {headline.p25 == null ? "—" : usd(headline.p25)}.
             </p>
-            <p>
-              FTMO en dos pasos, con riesgo del {pct(research.ladder.ftmo.risk, 2)}: en la simulación pasa el{" "}
-              {pct(research.ladder.ftmo.pass)} en {fmt.format(research.ladder.ftmo.days)} días. Las cuentas no se cubren entre sí:
-              esa cobertura está prohibida.
-            </p>
-            <p className="warn">Cifras de una simulación. El pasado de un backtest no es una renta futura.</p>
             <details>
               <summary>Otras políticas de la simulación</summary>
               <div className="table-wrap">
@@ -505,7 +551,7 @@ export function App() {
                       <th>18 m</th>
                       <th>24 m</th>
                       <th>Mes</th>
-                      <th>Cobro</th>
+                      <th>Mediana mensual</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -522,32 +568,13 @@ export function App() {
                   </tbody>
                 </table>
               </div>
-              <p className="fine">
-                En la política base, el capital financiado al final de la simulación es{" "}
-                {headline.fundedEnd == null ? "—" : usd(headline.fundedEnd)}, las comisiones suman{" "}
-                {headline.fees == null ? "—" : usd(headline.fees)} y las roturas medias son{" "}
-                {headline.breaches == null ? "—" : fmt1.format(headline.breaches)}.
-              </p>
             </details>
           </div>
         </section>
 
-        <section className="closing" id="nota">
-          <p className="kicker">Nota</p>
-          <h2>Esto no es un consejo</h2>
-          <p>
-            Investigación con backtests y operativa en paper. No es asesoramiento financiero, ni una oferta, ni una invitación
-            a operar. Los resultados pasados, también los de fuera de muestra, no anticipan resultados futuros. Las
-            probabilidades de la escalera describen una simulación de cuentas financiadas. Operar implica riesgo de perder el
-            capital.
-          </p>
-          <p className="fine dark">
-            Fuentes: registro de {fmt.format(research.counts.rows)} fichas, {fmt.format(research.counts.batches)} tandas, las
-            simulaciones de escalera y el resumen del {research.asOf.split("-").reverse().join("/")}. Familias de estrategia:{" "}
-            {fmt.format(research.counts.strategies)}.
-          </p>
-        </section>
+        <TesisSection onLit={setLit} onOpen={openNode} />
       </div>
+      <footer className="site-footer">Resultados de backtest y paper trading. No constituye asesoramiento financiero.</footer>
     </>
   );
 }

@@ -74,6 +74,20 @@ export interface ResearchFile {
   reasons: string[];
   params: string[];
   nodes: NodeTuple[];
+  fan: {
+    illustrative: boolean;
+    months: number;
+    monthlyDrift: number;
+    monthlyVol: number;
+    sample: number;
+    note: string;
+  };
+  seismo: {
+    symbols: string[];
+    batches: string[];
+    values: number[][];
+    note: string;
+  };
 }
 
 export type NodeTuple = [

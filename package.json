@@ -7,9 +7,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "data": "node scripts/preprocess.mjs",
-    "predev": "node scripts/preprocess.mjs",
-    "prebuild": "node scripts/preprocess.mjs",
+    "data": "node scripts/preprocess.mjs && node scripts/build-tesis.mjs",
+    "predev": "node scripts/preprocess.mjs && node scripts/build-tesis.mjs",
+    "prebuild": "node scripts/preprocess.mjs && node scripts/build-tesis.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173"

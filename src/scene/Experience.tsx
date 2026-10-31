@@ -4,11 +4,14 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { bindZoom } from "../bridge";
 import type { FilterId } from "../research";
-import { motion, scrollState, type SceneId } from "../scroll";
+import { INTERACTIVE, motion, scrollState, type SceneId } from "../scroll";
+import { Bloom } from "./Bloom";
 import { Brain } from "./Brain";
 import { Funnel } from "./Funnel";
 import { Ladder } from "./Ladder";
+import { MonteCarlo } from "./MonteCarlo";
 import { Pipeline } from "./Pipeline";
+import { Seismo } from "./Seismo";
 
 export function Experience({
   scene,
@@ -19,6 +22,7 @@ export function Experience({
   selected,
   onSelect,
   onStage,
+  emphasis,
 }: {
   scene: SceneId;
   compact: boolean;
@@ -28,6 +32,7 @@ export function Experience({
   selected: number | null;
   onSelect: (index: number | null) => void;
   onStage: (stage: number) => void;
+  emphasis: ReadonlySet<number> | null;
 }) {
   return (
     <>
@@ -40,9 +45,21 @@ export function Experience({
       <CameraRig compact={compact} />
       <Controls selected={selected} />
       <Dust compact={compact} />
-      {(scene === "relato" || scene === "cerebro") && (
-        <Brain filter={filter} query={query} market={market} selected={selected} onSelect={onSelect} />
+      {(scene === "relato" || scene === "cerebro" || scene === "neuronas" || scene === "tesis") && (
+        <Brain
+          filter={scene === "neuronas" || scene === "tesis" ? "all" : filter}
+          query={scene === "neuronas" || scene === "tesis" ? "" : query}
+          market={scene === "neuronas" || scene === "tesis" ? "" : market}
+          selected={selected}
+          onSelect={onSelect}
+          thinking={scene === "neuronas"}
+          emphasis={scene === "tesis" ? emphasis : null}
+          compact={compact}
+        />
       )}
+      {scene === "neuronas" && !compact && !motion.reduced && <Bloom />}
+      {scene === "graficos" && <MonteCarlo compact={compact} />}
+      {scene === "sismo" && <Seismo compact={compact} />}
       {scene === "tuberia" && <Pipeline compact={compact} onStage={onStage} />}
       {scene === "embudo" && <Funnel compact={compact} />}
       {scene === "escalera" && <Ladder compact={compact} />}
@@ -62,14 +79,20 @@ function CameraRig({ compact }: { compact: boolean }) {
     if (live === "tuberia") {
       fog.near = 11;
       fog.far = 32;
+    } else if (live === "graficos" || live === "sismo") {
+      fog.near = 12;
+      fog.far = 42;
     } else if (live === "embudo" || live === "escalera") {
       fog.near = 8;
       fog.far = 24;
+    } else if (live === "neuronas") {
+      fog.near = 2.4;
+      fog.far = 12;
     } else {
       fog.near = 5.5;
       fog.far = 16;
     }
-    if (live === "cerebro") return;
+    if (INTERACTIVE.includes(live)) return;
 
     const story = scrollState.story;
     if (live === "relato") {
@@ -94,6 +117,13 @@ function CameraRig({ compact }: { compact: boolean }) {
   return null;
 }
 
+function frameFor(scene: SceneId, compact: boolean) {
+  if (scene === "neuronas") return { position: new THREE.Vector3(0.15, 0.22, compact ? 4.5 : 3.15), target: new THREE.Vector3(0, 0.05, 0) };
+  if (scene === "graficos") return { position: new THREE.Vector3(6.4, 3.4, compact ? 7.6 : 6.2), target: new THREE.Vector3(0, 0.15, 0) };
+  if (scene === "sismo") return { position: new THREE.Vector3(5.2, 3.8, compact ? 7.2 : 6.4), target: new THREE.Vector3(0.4, 0, 0) };
+  return { position: new THREE.Vector3(0.2, 0.4, compact ? 7.6 : 7.2), target: new THREE.Vector3(0, 0.05, 0) };
+}
+
 function Controls({ selected }: { selected: number | null }) {
   const { camera, gl } = useThree();
   const selectedRef = useRef(selected);
@@ -101,35 +131,40 @@ function Controls({ selected }: { selected: number | null }) {
 
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
-    controls.enablePan = false;
-    controls.enableZoom = false;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.zoomSpeed = 0.7;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.autoRotateSpeed = 0.45;
-    controls.minPolarAngle = 0.55;
-    controls.maxPolarAngle = 2.15;
+    controls.minDistance = 1.7;
+    controls.maxDistance = 16;
+    controls.minPolarAngle = 0.35;
+    controls.maxPolarAngle = 2.25;
     controls.target.set(0, 0.05, 0);
     controls.enabled = false;
-
-    const onWheel = (event: WheelEvent) => {
-      if (scrollState.scene !== "cerebro") return;
-      window.scrollBy({ top: event.deltaY, left: 0 });
-    };
-    gl.domElement.addEventListener("wheel", onWheel, { passive: true });
+    controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 
     bindZoom((factor) => {
       const offset = camera.position.clone().sub(controls.target);
-      const distance = THREE.MathUtils.clamp(offset.length() * factor, 2.8, 9.2);
+      const distance = THREE.MathUtils.clamp(offset.length() * factor, 1.8, 16);
       offset.setLength(distance);
       camera.position.copy(controls.target).add(offset);
       controls.update();
     });
 
     let frame = 0;
+    let framed = "";
     const tick = () => {
-      const live = scrollState.scene === "cerebro";
+      const live = INTERACTIVE.includes(scrollState.scene);
       controls.enabled = live;
-      controls.autoRotate = live && selectedRef.current == null && !motion.reduced;
+      controls.autoRotate = scrollState.scene === "cerebro" && selectedRef.current == null && !motion.reduced;
+      if (live && framed !== scrollState.scene) {
+        const next = frameFor(scrollState.scene, window.innerWidth <= 800);
+        camera.position.copy(next.position);
+        controls.target.copy(next.target);
+        framed = scrollState.scene;
+      }
       if (live) controls.update();
       frame = requestAnimationFrame(tick);
     };
@@ -137,7 +172,6 @@ function Controls({ selected }: { selected: number | null }) {
 
     return () => {
       cancelAnimationFrame(frame);
-      gl.domElement.removeEventListener("wheel", onWheel);
       controls.dispose();
       bindZoom(null);
     };
