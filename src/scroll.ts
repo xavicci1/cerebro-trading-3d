@@ -1,4 +1,15 @@
-export type SceneId = "relato" | "cerebro" | "tuberia" | "embudo" | "escalera";
+export type SceneId =
+  | "relato"
+  | "cerebro"
+  | "neuronas"
+  | "graficos"
+  | "sismo"
+  | "tuberia"
+  | "embudo"
+  | "escalera"
+  | "tesis";
+
+export const INTERACTIVE: SceneId[] = ["cerebro", "neuronas", "graficos", "sismo"];
 
 export const scrollState = {
   story: 0,
@@ -36,7 +47,17 @@ export function subscribeScroll(fn: () => void) {
 
 export function sceneAtMarker(markerRatio = 0.38): SceneId {
   const marker = window.innerHeight * markerRatio;
-  const ids: SceneId[] = ["relato", "cerebro", "tuberia", "embudo", "escalera"];
+  const ids: SceneId[] = [
+    "relato",
+    "cerebro",
+    "neuronas",
+    "graficos",
+    "sismo",
+    "tuberia",
+    "embudo",
+    "escalera",
+    "tesis",
+  ];
   let current: SceneId = "relato";
   for (const id of ids) {
     const el = document.getElementById(id);

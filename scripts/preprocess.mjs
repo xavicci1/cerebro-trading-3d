@@ -175,6 +175,7 @@ const rows = registry.map((row, index) => {
     reason: (row.reason || "").trim(),
     params: (row.params || "").trim(),
     batch: row.batch || "",
+    testedAt: row.tested_at || "",
     passT: oosT != null && oosT >= 1.5,
     passPf: oosPf != null && oosPf >= 1.1,
     passN: oosN != null && oosN >= 100,
@@ -393,7 +394,90 @@ const payload = {
   reasons,
   params,
   nodes,
+  fan: buildFan(registry),
+  seismo: buildSeismo(rows),
 };
+
+function buildFan(registry) {
+  const windowMonths = 22;
+  const sample = [];
+  for (const row of registry) {
+    if ((row.verdict || "").trim() !== "KEEP") continue;
+    const ret = rawNum(row.OOS_ret);
+    const dd = rawNum(row.OOS_dd);
+    const n = rawNum(row.OOS_n);
+    if (ret == null || dd == null || n == null || n < 30) continue;
+    sample.push({ ret, dd });
+  }
+  const monthly = sample.map((item) => item.ret / 100 / windowMonths);
+  const drawdowns = sample.map((item) => item.dd / 100);
+  const drift = median(monthly);
+  const ddMed = median(drawdowns);
+  const vol = ddMed == null ? null : Math.max(0.004, ddMed / Math.sqrt(windowMonths));
+  if (drift == null || vol == null) {
+    return {
+      illustrative: true,
+      months: 24,
+      monthlyDrift: 0,
+      monthlyVol: 0.02,
+      sample: 0,
+      note: "Simulación ilustrativa. El registro no trae suficientes retornos conservados para calibrarla.",
+    };
+  }
+  return {
+    illustrative: true,
+    months: 24,
+    monthlyDrift: Math.round(drift * 1e6) / 1e6,
+    monthlyVol: Math.round(vol * 1e6) / 1e6,
+    sample: sample.length,
+    note: "Simulación ilustrativa. El paso mensual usa el retorno fuera de muestra de las fichas conservadas, repartido en la ventana 2024–octubre 2026, y el drawdown mediano como escala de ruido. No es la curva real de la cartera.",
+  };
+}
+
+function buildSeismo(rows) {
+  const prop = /ftmo|funded|5ers|topstep/i;
+  const batchTime = new Map();
+  const symbolCount = new Map();
+  for (const row of rows) {
+    if (row.batch) {
+      const prev = batchTime.get(row.batch);
+      const stamp = row.testedAt || "";
+      if (!prev || (stamp && stamp < prev)) batchTime.set(row.batch, stamp || prev || "");
+    }
+    if (!row.symbol || prop.test(row.symbol)) continue;
+    symbolCount.set(row.symbol, (symbolCount.get(row.symbol) || 0) + 1);
+  }
+  const symbols = [...symbolCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([symbol]) => symbol);
+  const batches = [...batchTime.keys()].sort((a, b) => (batchTime.get(a) || "").localeCompare(batchTime.get(b) || ""));
+  const buckets = new Map();
+  const symbolValues = new Map(symbols.map((symbol) => [symbol, []]));
+  for (const row of rows) {
+    if (row.oosT == null || !symbols.includes(row.symbol) || !batches.includes(row.batch)) continue;
+    const key = `${row.symbol}|${row.batch}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(row.oosT);
+    symbolValues.get(row.symbol).push(row.oosT);
+  }
+  const symbolFallback = new Map(
+    symbols.map((symbol) => [symbol, median(symbolValues.get(symbol)) ?? 0]),
+  );
+  const values = batches.map((batch) =>
+    symbols.map((symbol) => {
+      const cell = median(buckets.get(`${symbol}|${batch}`) || []);
+      const value = cell ?? symbolFallback.get(symbol) ?? 0;
+      return Math.round(value * 1000) / 1000;
+    }),
+  );
+  return {
+    symbols,
+    batches: batches.map((_, index) => String(index + 1).padStart(2, "0")),
+    values,
+    note: "Relieve con el t mediano fuera de muestra, por mercado y por tanda de la investigación. La onda es solo el movimiento del gráfico.",
+  };
+}
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 fs.writeFileSync(outFile, JSON.stringify(payload));

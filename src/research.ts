@@ -58,7 +58,7 @@ export function nodeMatches(node: NodeRec, filter: FilterId, query: string, mark
   if (filter === "p2" && !node.p2) return false;
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  const blob = `${node.strategy} ${strategyName(node.strategy)} ${node.symbol} ${symbolName(node.symbol)}`.toLowerCase();
+  const blob = `${strategyName(node.strategy)} ${symbolName(node.symbol)}`.toLowerCase();
   return blob.includes(q);
 }
 

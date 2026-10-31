@@ -5,6 +5,7 @@ import { placeNodes } from "../layoutBrain";
 import { PALETTE } from "../palette";
 import { nodes, nodeMatches, research, type FilterId } from "../research";
 import { motion, scrollState } from "../scroll";
+import { Synapses } from "./Synapses";
 import { getGlowTexture } from "./textures";
 
 function smooth(value: number) {
@@ -26,12 +27,18 @@ export function Brain({
   market,
   selected,
   onSelect,
+  thinking = false,
+  emphasis = null,
+  compact = false,
 }: {
   filter: FilterId;
   query: string;
   market: string;
   selected: number | null;
   onSelect: (index: number | null) => void;
+  thinking?: boolean;
+  emphasis?: ReadonlySet<number> | null;
+  compact?: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
   const mesh = useRef<THREE.InstancedMesh>(null);
@@ -42,6 +49,10 @@ export function Brain({
   const bounded = useRef(false);
   const pressed = useRef({ x: 0, y: 0, hit: false });
   const lastSelected = useRef<number | null>(null);
+  const emphasisRef = useRef(emphasis);
+  emphasisRef.current = emphasis;
+  const thinkingRef = useRef(thinking);
+  thinkingRef.current = thinking;
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const color = useMemo(() => new THREE.Color(), []);
   const placed = useMemo(() => placeNodes(nodes), []);
@@ -77,7 +88,7 @@ export function Brain({
 
   useLayoutEffect(() => {
     dirty.current = true;
-  }, [mask]);
+  }, [mask, emphasis, thinking]);
 
   useLayoutEffect(() => {
     return () => {
@@ -100,11 +111,15 @@ export function Brain({
     const forming = ease < 0.995 || scrollState.scene === "relato";
     const instanced = mesh.current;
     if (!instanced) return;
+    const emph = emphasisRef.current;
+    const pulseEmph = Boolean(emph && emph.size > 0 && emph.size <= 80);
 
-    if (forming || dirty.current) {
+    if (forming || dirty.current || pulseEmph) {
       for (let index = 0; index < nodes.length; index += 1) {
-        writeInstance(index, ease, 1);
-        const dim = mask[index] ? 1 : 0.16;
+        const lit = !emph || emph.has(index);
+        const pulse = lit && pulseEmph ? 1.22 + Math.sin(performance.now() * 0.005 + index) * 0.08 : 1;
+        writeInstance(index, ease, pulse, lit);
+        const dim = lit ? (mask[index] ? (thinkingRef.current ? 1.35 : 1) : 0.16) : 0.08;
         const fade = 0.2 + 0.8 * ease;
         color.copy(COLORS[nodes[index].verdict]).multiplyScalar(dim * fade);
         instanced.setColorAt(index, color);
@@ -138,9 +153,9 @@ export function Brain({
     lineMaterial.opacity = ease > 0.84 ? ((ease - 0.84) / 0.16) * 0.75 : 0;
   });
 
-  function writeInstance(index: number, ease: number, pulse: number) {
+  function writeInstance(index: number, ease: number, pulse: number, lit = true) {
     const spot = placed[index];
-    const shown = mask[index] ? 1 : 0.28;
+    const shown = lit ? (mask[index] ? 1 : 0.28) : 0.2;
     dummy.position.set(
       spot.sx + (spot.x - spot.sx) * ease,
       spot.sy + (spot.y - spot.sy) * ease,
@@ -189,6 +204,7 @@ export function Brain({
         }}
       />
       <lineSegments geometry={lineGeometry} material={lineMaterial} />
+      {thinking && <Synapses placed={placed} compact={compact} />}
       <sprite ref={nucleus} scale={[1.35, 1.35, 1]}>
         <spriteMaterial
           map={getGlowTexture()}
